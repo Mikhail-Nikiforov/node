@@ -4,7 +4,7 @@
   "description": "gb_node",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "npx nodemon index.js"
   },
   "bin": {
     "logFilter": "index.js"
@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/Mikhail-Nikiforov/gb_node#readme",
   "dependencies": {
-    "inquirer": "^8.1.1",
-    "yargs": "^17.0.1"
+    "glob": "^7.1.7",
+    "inquirer": "^8.1.1"
   }
 }

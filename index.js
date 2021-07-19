@@ -2,74 +2,96 @@
 
 const EventEmmitter = require('events');
 const fs = require('fs');
-const yargs = require("yargs");
-const path = require("path");
-const readline = require("readline");
-const inquirer = require("inquirer");
+const path = require('path');
+const cluster = require('cluster');
+const os = require('os');
+const http = require('http');
+const glob = require('glob');
+const querystring = require('querystring');
+const { GlobSync } = require('glob');
 
-const emitter = new EventEmmitter();
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
+const numCPUs = os.cpus().length;
 
-emitter.on(`pathChosen`, (directoryPath) => {
-    let list = fs.readdirSync(directoryPath)
+if (cluster.isMaster) {
+  console.log(`Master ${process.pid} is running`);
 
-    inquirer
-        .prompt([
-            {
-                name: "fileName",
-                type: "list",
-                message: "Choose file:",
-                choices: list,
-            },
-        ])
-        .then((answer) => {
-            const filePath = path.join(directoryPath, answer.fileName);
-            if (fs.lstatSync(filePath).isFile()) {
-                fs.readFile(filePath, 'utf8', (err, data) => {
-                    if (err) throw err;
-                    emitter.emit(`fileChosen`, data);
-                });
-                
-            } else {
-                emitter.emit(`pathChosen`, filePath);
-            }
-        })
-        .catch((err) => console.log(err));
-});
-emitter.on(`fileChosen`, (fileData) => {
+  for (let i = 0; i < numCPUs; i++) {
+    console.log(`Forking process number ${i}...`);
+    cluster.fork();
+  }
+} else {
+  console.log(`Worker ${process.pid} started...`);
 
-    let dataArr = fileData.split(`\n`);
-    rl.resume();
-    rl.question("Укажите IP-адреса (если их несколько, укажите через пробел): ", (adresses) => {
-        emitter.emit(`ipChosen`, adresses, dataArr);
-        
-    });
-});
-emitter.on(`ipChosen`, (ipArr, dataArr) => {
-    if (ipArr.includes(` `)) {
-        ipArr = ipArr.split(` `);
-    } else {
-        ipArr = [ipArr];
-    }
-
-    for (let i = 0; i < dataArr.length; i++) {
-        ipArr.forEach(element => {
-            if (dataArr[i].includes(element)) {
-                fs.writeFileSync(`./${element}_request.log`, dataArr[i] + `\n`, { encoding: "utf8", flag: "a+" })
-            }
-        });
-    }
-
-    console.log(`Логи отфильтрованы`);
-    process.exit();
-});
-
-rl.question("Введите путь к директории содержащей файл: ", (inputedPath) => {
-    let directoryPath = path.join(process.cwd(), inputedPath);
-    rl.pause();
-    emitter.emit(`pathChosen`, directoryPath);
+  http.createServer((request, response) => {
+    console.log(`Worker ${process.pid} handle this request...`);
+    const queryParams = querystring.parse(request.url.split('?')[1]);
     
-});
+    if ((request.method === 'GET') && (queryParams.getDirectoryTree == 1)) {
+
+      let startPath = `test`;
+      let directoryTree = glob.sync(startPath + '/**/*');
+
+      directoryTree = directoryTree.map((item, index) => {
+        const itemName = item.slice(item.lastIndexOf(`/`) + 1),
+              children = [];
+        
+        if (item.split(`/`).length == 2) {
+          return {
+            id: index,
+            name: itemName,
+            path: item,
+            children: children
+          } 
+        }
+        return {
+          id: index,
+          name: itemName,
+          path: item,
+          children: children
+        }
+      });
+
+        response.writeHead(200, { 'Content-Type': 'json' });
+        response.write(JSON.stringify(directoryTree));
+        response.end();
+
+    } else if ((request.method === 'GET') && (queryParams.getFileText)) {
+          const filePath = path.join(__dirname, queryParams.getFileText)
+          fs.readFile(filePath, `utf8`, (err, data) => {
+            if (err) throw err
+            console.log(`Send to client: ` + data);
+
+            response.writeHead(200, { 'Content-Type': 'text/plain' });   
+
+            response.write(JSON.stringify(data));
+            response.end();
+          });
+
+    } else if (request.method === 'GET') {
+      const filePath = path.join(__dirname, 'index.html');
+      readStream = fs.createReadStream(filePath);
+
+      response.writeHead(200, { 'Content-Type': 'text/html'});
+      readStream.pipe(response);
+    } else if (request.method === 'POST') {
+
+      let data = ``;
+
+      request.on('data', chunk => {
+        data += chunk;
+      });
+
+      request.on('end', () => {
+        const parsedData = JSON.parse(data);
+        console.log(parsedData);
+
+        response.writeHead(200, { 'Content-Type': 'json'});
+        response.end(data);
+      });
+    } else {
+      response.statusCode = 405;
+      response.end();
+    }
+  
+  }).listen(3000, 'localhost');
+}

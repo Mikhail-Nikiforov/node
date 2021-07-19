@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/@mdi/font@4.x/css/materialdesignicons.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css"
+      rel="stylesheet"
+    />
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
+    />
+    <title>Document</title>
+  </head>
+  <body>
+    <h1>File catalog</h1>
+
+    <div id="app">
+      <v-app id="inspire">
+        <v-treeview
+          v-model="tree"
+          :open="open"
+          :items="items"
+          activatable
+          item-key="name"
+          open-on-click
+          v-bind:id="123"
+        >
+          <template v-slot:prepend="{ item, open }">
+            <v-icon v-if="!item.file">
+              {{ open ? 'mdi-folder-open' : 'mdi-folder' }}
+            </v-icon>
+            <v-icon v-else> {{ files[item.file] }} </v-icon>
+          </template>
+        </v-treeview>
+            <v-card height="150">
+      <v-footer
+        absolute
+        class="font-weight-medium"
+      >
+ <p class="text-caption" id="textArea"></p>
+        </v-col>
+      </v-footer>
+    </v-card>
+      </v-app>
+    </div>
+   
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+
+    <script>
+      let app = new Vue({
+        el: "#app",
+        vuetify: new Vuetify(),
+        data: {
+          open: ["public"],
+          files: {
+            html: "mdi-language-html5",
+            js: "mdi-nodejs",
+            json: "mdi-json",
+            md: "mdi-markdown",
+            pdf: "mdi-file-pdf",
+            png: "mdi-file-image",
+            txt: "mdi-file-document-outline",
+            xls: "mdi-file-excel",
+          },
+          tree: [],
+          items: [],
+        },
+      });
+
+      fetch(`http://localhost:3000?getDirectoryTree=1`)
+        .then((response) => response.json())
+        .then((data) => {
+          const directoryTree = [...data];
+
+          for (let i = directoryTree.length - 1; i >= 0; i--) {
+            if (directoryTree[i].name.includes("txt")) {
+              directoryTree[i].file = "txt";
+            }
+            if (directoryTree[i].path.split("/").length > 2) {
+              const parentPath = directoryTree[i].path.slice(
+                0,
+                directoryTree[i].path.lastIndexOf(`/`)
+              );
+              for (let j = directoryTree.length - 1; j >= 0; j--) {
+                if (directoryTree[j].path == parentPath) {
+                  directoryTree[j].children.push(directoryTree[i]);
+                  directoryTree.splice(i, 1);
+                }
+              }
+            }
+          }
+          app.items = directoryTree;
+
+          return data;
+        })
+        .then((data) => {
+          document.addEventListener("click", (e) => {
+            if (e.target.className == `v-treeview-node__label`) {
+              for (let i = 0; i < data.length; i++) {
+                if (
+                  e.target.innerHTML == data[i].name &&
+                  data[i].file == "txt"
+                ) {
+                  fetch(`http://localhost:3000?getFileText=${data[i].path}`)
+                    .then((response) => response.json())
+                    .then((response) => {
+                      document.getElementById("textArea").innerHTML = response;
+                    });
+                }
+              }
+            }
+          });
+        });
+    </script>
+  </body>
+</html>

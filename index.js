@@ -1,16 +1,28 @@
 #!/usr/bin/env node
 
-const EventEmmitter = require('events');
 const fs = require('fs');
 const path = require('path');
 const cluster = require('cluster');
 const os = require('os');
+const io = require('socket.io');
 const http = require('http');
 const glob = require('glob');
 const querystring = require('querystring');
 const { GlobSync } = require('glob');
+const { Worker } = require('worker_threads')
 
 const numCPUs = os.cpus().length;
+
+function searchWorker(workerData) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker('./worker.js', { workerData });
+
+    worker.on('message', resolve);
+    worker.on('error', reject);
+  })
+}
+
+let onlineCounter = 0;
 
 if (cluster.isMaster) {
   console.log(`Master ${process.pid} is running`);
@@ -22,7 +34,7 @@ if (cluster.isMaster) {
 } else {
   console.log(`Worker ${process.pid} started...`);
 
-  http.createServer((request, response) => {
+  const app = http.createServer((request, response) => {
     console.log(`Worker ${process.pid} handle this request...`);
     const queryParams = querystring.parse(request.url.split('?')[1]);
     
@@ -33,7 +45,7 @@ if (cluster.isMaster) {
 
       directoryTree = directoryTree.map((item, index) => {
         const itemName = item.slice(item.lastIndexOf(`/`) + 1),
-              children = [];
+          children = [];
         
         if (item.split(`/`).length == 2) {
           return {
@@ -41,7 +53,7 @@ if (cluster.isMaster) {
             name: itemName,
             path: item,
             children: children
-          } 
+          }
         }
         return {
           id: index,
@@ -51,21 +63,23 @@ if (cluster.isMaster) {
         }
       });
 
-        response.writeHead(200, { 'Content-Type': 'json' });
-        response.write(JSON.stringify(directoryTree));
-        response.end();
+      response.writeHead(200, { 'Content-Type': 'json' });
+      response.write(JSON.stringify(directoryTree));
+      response.end();
 
     } else if ((request.method === 'GET') && (queryParams.getFileText)) {
-          const filePath = path.join(__dirname, queryParams.getFileText)
-          fs.readFile(filePath, `utf8`, (err, data) => {
-            if (err) throw err
-            console.log(`Send to client: ` + data);
+      const filePath = path.join(__dirname, queryParams.getFileText);
+      
+      searchWorker(filePath)
+        .then(result => {
+          console.log(result);
 
-            response.writeHead(200, { 'Content-Type': 'text/plain' });   
+          response.writeHead(200, { 'Content-Type': 'text/plain' });   
 
-            response.write(JSON.stringify(data));
-            response.end();
-          });
+          response.write(JSON.stringify(result));
+          response.end();
+        })
+        .catch(err => console.error(err));
 
     } else if (request.method === 'GET') {
       const filePath = path.join(__dirname, 'index.html');
@@ -93,5 +107,25 @@ if (cluster.isMaster) {
       response.end();
     }
   
-  }).listen(3000, 'localhost');
+  })
+
+  const socket = io(app);
+
+  socket.on('connection', function (socket) {
+    console.log('New connection');
+    ++onlineCounter;
+
+    socket.emit('ONLINE_COUNTER', { onlineCounter: onlineCounter });
+    socket.broadcast.emit('ONLINE_COUNTER', { onlineCounter: onlineCounter});
+    
+    socket.on('disconnect', function () {
+      console.log('Disconnection');
+      --onlineCounter;
+      
+      socket.emit('ONLINE_COUNTER', { onlineCounter: onlineCounter});
+      socket.broadcast.emit('ONLINE_COUNTER', { onlineCounter: onlineCounter});
+    });
+  });
+  
+  app.listen(3000, 'localhost');
 }

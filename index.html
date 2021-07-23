@@ -1,5 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+  <script
+    src="https://cdn.socket.io/3.1.1/socket.io.min.js"
+    integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
+    crossorigin="anonymous"
+  ></script>
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -27,6 +32,26 @@
 
     <div id="app">
       <v-app id="inspire">
+        <v-card>
+          <v-sheet class="pa-4 primary lighten-2">
+            <v-text-field
+              v-model="search"
+              label="Search File"
+              dark
+              flat
+              solo-inverted
+              hide-details
+              clearable
+              clear-icon="mdi-close-circle-outline"
+            ></v-text-field>
+            <v-checkbox
+              v-model="caseSensitive"
+              dark
+              hide-details
+              label="Case sensitive search"
+            ></v-checkbox>
+          </v-sheet>
+        </v-card>
         <v-treeview
           v-model="tree"
           :open="open"
@@ -34,6 +59,8 @@
           activatable
           item-key="name"
           open-on-click
+          :search="search"
+          :filter="filter"
           v-bind:id="123"
         >
           <template v-slot:prepend="{ item, open }">
@@ -43,23 +70,26 @@
             <v-icon v-else> {{ files[item.file] }} </v-icon>
           </template>
         </v-treeview>
-            <v-card height="150">
-      <v-footer
-        absolute
-        class="font-weight-medium"
-      >
- <p class="text-caption" id="textArea"></p>
-        </v-col>
-      </v-footer>
-    </v-card>
+        <v-card height="150">
+          <v-footer absolute class="font-weight-medium justify-space-between">
+            <p>User now online: <span id="onlineCounter"></span></p>
+
+            <p class="text-caption" id="textArea"></p>
+          </v-footer>
+        </v-card>
       </v-app>
     </div>
-   
 
     <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
 
     <script>
+      const socket = io("localhost:3000");
+
+      socket.on("ONLINE_COUNTER", function (data) {
+        document.getElementById("onlineCounter").innerHTML = data.onlineCounter;
+      });
+
       let app = new Vue({
         el: "#app",
         vuetify: new Vuetify(),
@@ -77,6 +107,15 @@
           },
           tree: [],
           items: [],
+          search: null,
+          caseSensitive: false,
+        },
+        computed: {
+          filter() {
+            return this.caseSensitive
+              ? (item, search, textKey) => item[textKey].indexOf(search) > -1
+              : undefined;
+          },
         },
       });
 
@@ -114,10 +153,12 @@
                   e.target.innerHTML == data[i].name &&
                   data[i].file == "txt"
                 ) {
+                  document.getElementById("textArea").innerHTML = `In process`;
                   fetch(`http://localhost:3000?getFileText=${data[i].path}`)
                     .then((response) => response.json())
                     .then((response) => {
-                      document.getElementById("textArea").innerHTML = response;
+                      document.getElementById("textArea").innerHTML =
+                        response.result;
                     });
                 }
               }

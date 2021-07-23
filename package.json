@@ -1,0 +1,27 @@
+{
+  "name": "gb_node",
+  "version": "1.0.0",
+  "description": "gb_node",
+  "main": "index.js",
+  "scripts": {
+    "start": "npx nodemon index.js"
+  },
+  "bin": {
+    "logFilter": "index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mikhail-Nikiforov/gb_node.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mikhail-Nikiforov/gb_node/issues"
+  },
+  "homepage": "https://github.com/Mikhail-Nikiforov/gb_node#readme",
+  "dependencies": {
+    "glob": "^7.1.7",
+    "inquirer": "^8.1.1"
+  }
+}
